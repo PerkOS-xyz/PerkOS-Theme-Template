@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "releaseVersion": "1.0.0",
+  "name": "PerkOS",
+  "scheme": "dark",
+  "colors": {
+    "background": "#1D1029",
+    "surface": "#261633",
+    "text": "#FFF5FB",
+    "primary": "#EB1B69",
+    "secondary": "#EF5B57",
+    "success": "#65D9A4",
+    "warning": "#FFD277",
+    "danger": "#FF8798",
+    "gradient": ["#EB1B69", "#EF5B57"]
+  }
+}

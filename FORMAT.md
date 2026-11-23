@@ -5,6 +5,7 @@ File extension: `.perkos-theme.json`. Version 1 files (palettes) still import.
 | Field | Value |
 | --- | --- |
 | `version`, `name`, `scheme` | `2`, a trimmed name of 1 to 80 characters, and `dark` or `light` |
+| `releaseVersion` | Optional release number in `X.Y.Z` form. Required by the template's release script. |
 | `colors` | Required `background`, `surface`, `text`, `primary`, `secondary`, `success`, `warning`, `danger`; optional `bar` and `gradient` (two or three stops) |
 | `logo`, `sparky` | Optional images: the in-content brand mark and Sparky's chat avatar |
 | `networkHeader` | Optional `{ name, logo, notices, source, terms, reviewedAt }`. Leave it out to hide the header. |
