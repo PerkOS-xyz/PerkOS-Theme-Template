@@ -1,12 +1,14 @@
 import { closeSync, openSync, readdirSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { Ajv, type ErrorObject } from "ajv";
+import { checkContrast, type ThemeColors } from "./contrast.ts";
 import { checkImage, type Image } from "./images.ts";
 import schema from "../schema/theme-v2.schema.json" with { type: "json" };
 
 const maxFileBytes = 544 * 1024;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const checkSchema = new Ajv({ allErrors: true, ownProperties: true }).compile<{
+  colors: ThemeColors;
   logo?: Image;
   sparky?: Image;
   networkHeader?: { logo: Image };
@@ -41,7 +43,7 @@ export function validateTheme(bytes: Uint8Array): string[] {
     return ["invalid UTF-8 JSON: " + message(error)];
   }
   if (!checkSchema(theme)) return (checkSchema.errors ?? []).map(schemaMessage);
-  const issues: string[] = [];
+  const issues = checkContrast(theme.colors);
   const images = { "/logo": theme.logo, "/sparky": theme.sparky, "/networkHeader/logo": theme.networkHeader?.logo };
   for (const [path, image] of Object.entries(images)) {
     if (!image) continue;
