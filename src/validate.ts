@@ -6,11 +6,19 @@ import schema from "../schema/theme-v2.schema.json" with { type: "json" };
 
 const maxFileBytes = 544 * 1024;
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const checkSchema = new Ajv({ allErrors: true, ownProperties: true }).compile<{
+export type Theme = {
+  version: 2;
+  name: string;
+  scheme: "dark" | "light";
+  colors: Record<"background" | "surface" | "text" | "primary" | "secondary" | "success" | "warning" | "danger", string> & {
+    bar?: string;
+    gradient?: string[];
+  };
   logo?: Image;
   sparky?: Image;
-  networkHeader?: { logo: Image };
-}>(schema);
+  networkHeader?: { name: string; logo: Image; notices: string[]; source: string; terms: string; reviewedAt: string };
+};
+const checkSchema = new Ajv({ allErrors: true, ownProperties: true }).compile<Theme>(schema);
 
 function schemaMessage(error: ErrorObject): string {
   const path = error.instancePath || "/";
@@ -33,14 +41,19 @@ function message(error: unknown): string {
 }
 
 export function validateTheme(bytes: Uint8Array): string[] {
-  if (bytes.byteLength > maxFileBytes) return ["theme file exceeds 544 KiB"];
+  const result = parseTheme(bytes);
+  return "issues" in result ? result.issues : [];
+}
+
+export function parseTheme(bytes: Uint8Array): { theme: Theme } | { issues: string[] } {
+  if (bytes.byteLength > maxFileBytes) return { issues: ["theme file exceeds 544 KiB"] };
   let theme: unknown;
   try {
     theme = JSON.parse(decoder.decode(bytes));
   } catch (error) {
-    return ["invalid UTF-8 JSON: " + message(error)];
+    return { issues: ["invalid UTF-8 JSON: " + message(error)] };
   }
-  if (!checkSchema(theme)) return (checkSchema.errors ?? []).map(schemaMessage);
+  if (!checkSchema(theme)) return { issues: (checkSchema.errors ?? []).map(schemaMessage) };
   const issues: string[] = [];
   const images = { "/logo": theme.logo, "/sparky": theme.sparky, "/networkHeader/logo": theme.networkHeader?.logo };
   for (const [path, image] of Object.entries(images)) {
@@ -51,7 +64,7 @@ export function validateTheme(bytes: Uint8Array): string[] {
       issues.push(path + ": " + message(error));
     }
   }
-  return issues;
+  return issues.length ? { issues } : { theme };
 }
 
 function* themePaths(directory: string): Generator<string> {
@@ -65,7 +78,7 @@ function* themePaths(directory: string): Generator<string> {
   }
 }
 
-function readTheme(path: string): Buffer {
+export function readTheme(path: string): Buffer {
   const file = openSync(path, "r");
   try {
     const bytes = Buffer.alloc(maxFileBytes + 1);
