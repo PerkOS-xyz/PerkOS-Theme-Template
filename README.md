@@ -1,6 +1,14 @@
 # PerkOS Theme Template
 
-Start here to build a theme for PerkOS Runtime. Press **Use this template** on GitHub, edit `theme.perkos-theme.json`, run the checks, and release it with a tag. PerkOS Runtime and the PerkOS catalogue read the released file.
+Start here to build a theme for PerkOS Runtime. PerkOS Runtime and the PerkOS catalogue read the released theme file.
+
+## Create and preview a theme
+
+1. On GitHub, choose **Use this template** and create a repository. Clone your copy and open its root directory.
+2. With Node 22.18 or later in the Node 22 series, install the dev dependencies with `npm install --no-package-lock`.
+3. Edit `theme.perkos-theme.json`, starting with the PerkOS dark example. Set the name, scheme, and colors, then add any optional images and notices.
+4. Run `npm run check`. Fix each reported issue before releasing.
+5. Import `theme.perkos-theme.json` in PerkOS Runtime on a test desk. Open its board and chat to preview the theme, then edit and re-import as needed.
 
 ## What a theme is
 
@@ -16,4 +24,14 @@ Only use marks you have the rights to. Keep each brand's proportions, colors and
 
 ## Releases
 
-Tag a release as `vX.Y.Z`. Desks and the catalogue pin a theme by its tag.
+Set `releaseVersion` in `theme.perkos-theme.json` to the release number, such as `1.0.0`. Keep the file format's `version` at `2`.
+
+Run `npm run typecheck` and `npm test`, then commit your changes and run these commands from the repository root:
+
+```sh
+node src/release.ts v1.0.0
+git push origin HEAD
+git push origin v1.0.0
+```
+
+Use your release number in both commands that mention the tag. The script creates the local tag only when the working tree is clean, the committed theme's `releaseVersion` matches the tag, and `npm run check` passes. Desks and the catalogue pin a theme by its tag. To add release notes, publish a GitHub release using the pushed tag.
