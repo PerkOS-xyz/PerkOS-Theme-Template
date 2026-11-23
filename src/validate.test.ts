@@ -28,6 +28,13 @@ const webp = {
   base64: "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
 };
 
+function extendedWebp(header: Buffer, chunks: Buffer) {
+  const riff = Buffer.from(webp.base64, "base64").subarray(0, 12);
+  const bytes = Buffer.concat([riff, header, chunks]);
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  return { ...webp, base64: bytes.toString("base64") };
+}
+
 function svg(markup: string) {
   return { mime: "image/svg+xml", base64: Buffer.from(markup).toString("base64") };
 }
@@ -112,19 +119,40 @@ describe("theme validation", () => {
     const concatenated = Buffer.concat([jpg, jpg]).toString("base64");
     expect(check({ ...theme, logo: { ...jpeg, base64: concatenated } }))
       .toEqual(["/logo: JPEG must contain one complete image"]);
-    const still = Buffer.from(webp.base64, "base64");
     const extendedHeader = Buffer.from("565038580a00000002000000000000000000", "hex");
-    const animated = Buffer.concat([still.subarray(0, 12), extendedHeader, still.subarray(12)]);
-    animated.writeUInt32LE(animated.length - 8, 4);
-    expect(check({ ...theme, logo: { ...webp, base64: animated.toString("base64") } }))
+    const frame = Buffer.from(webp.base64, "base64").subarray(12);
+    expect(check({ ...theme, logo: extendedWebp(extendedHeader, frame) }))
       .toEqual(["/logo: animated images are forbidden"]);
+  });
+
+  it.each(["ANIM", "ANMF"])("rejects WebP %s chunks even with the animation flag clear", kind => {
+    const header = Buffer.from("565038580a00000000000000000000000000", "hex");
+    const chunk = Buffer.alloc(8);
+    chunk.write(kind);
+    const frame = Buffer.from(webp.base64, "base64").subarray(12);
+    expect(check({ ...theme, logo: extendedWebp(header, Buffer.concat([chunk, frame])) }))
+      .toEqual(["/logo: animated images are forbidden"]);
+  });
+
+  it("checks encoded WebP frame dimensions as well as the extended canvas", () => {
+    const header = Buffer.from("565038580a00000000000000000000000000", "hex");
+    const frame = Buffer.from(webp.base64, "base64").subarray(12);
+    expect(check({ ...theme, logo: extendedWebp(header, frame) })).toEqual([]);
+    frame.writeUInt16LE(1025, 14);
+    expect(check({ ...theme, logo: extendedWebp(header, frame) })[0]).toContain("1024 × 1024");
+    const lossless = Buffer.from("5650384c050000002f0004000000", "hex");
+    expect(check({ ...theme, logo: extendedWebp(header, lossless) })[0]).toContain("1024 × 1024");
   });
 
   it.each([
     ['<svg viewBox="0 0 32 32"><script/></svg>', "element <script>"],
     ['<svg viewBox="0 0 32 32"><rect onload="alert(1)"/></svg>', "attribute onload"],
     ['<svg viewBox="0 0 32 32"><path href="#shape"/></svg>', "attribute href"],
+    ['<svg viewBox="0 0 32 32"><path xlink:href="#shape"/></svg>', "attribute xlink:href"],
     ['<svg viewBox="0 0 32 32"><path fill="url(#paint)"/></svg>', "attribute fill"],
+    ['<svg viewBox="0 0 32 32"><image href="https://example.com/image.png"/></svg>', "element <image>"],
+    ['<svg viewBox="0 0 32 32"><foreignObject/></svg>', "element <foreignObject>"],
+    ['<svg viewBox="0 0 32 32"><animate/></svg>', "element <animate>"],
     ['<svg viewBox="0 0 32 32"><rect style="fill:red"/></svg>', "attribute style"],
     ['<svg viewBox="0 0 32 32"><title>&amp;</title></svg>', "entity references"],
     ['<!DOCTYPE svg><svg viewBox="0 0 32 32"/>', "doctypes"],
@@ -144,13 +172,19 @@ it("checks every matching file, including nested hidden folders, and reports fai
     mkdirSync(join(directory, ".themes"));
     writeFileSync(join(directory, ".themes", "valid.perkos-theme.json"), JSON.stringify(theme));
     writeFileSync(join(directory, "invalid.perkos-theme.json"), JSON.stringify({ ...theme, version: 1 }));
+    writeFileSync(join(directory, "unsafe.perkos-theme.json"), JSON.stringify({
+      ...theme, logo: svg('<svg viewBox="0 0 32 32"><path href="#shape"/></svg>'),
+    }));
     writeFileSync(join(directory, "ignored.json"), "{");
     const script = fileURLToPath(new URL("./validate.ts", import.meta.url));
     const result = spawnSync(process.execPath, [script], { cwd: directory, encoding: "utf8" });
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(join(".themes", "valid.perkos-theme.json") + ": valid");
-    expect(result.stderr.trim()).toBe("invalid.perkos-theme.json: /version must be 2");
+    expect(result.stderr.trim().split("\n")).toEqual([
+      "invalid.perkos-theme.json: /version must be 2",
+      "unsafe.perkos-theme.json: /logo: SVG attribute href has an unsupported name or value",
+    ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
