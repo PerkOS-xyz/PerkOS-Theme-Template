@@ -53,6 +53,13 @@ it("writes an offline page with every themed role and all preview sections", () 
     expect(html).toContain(`--${role}: ${color};`);
     expect(html).toContain(`var(--${role})`);
   }
+  for (const [role, color] of Object.entries({
+    hover: "#323232", border: "#585858", "strong-border": "#797979",
+    "muted-text": "#C7C7C7", "on-primary": "#000000",
+  })) {
+    expect(html).toContain(`--${role}: ${color};`);
+    expect(html).toContain(`var(--${role})`);
+  }
   expect(html).toContain("color-scheme: dark");
   expect(html).toContain("--gradient: linear-gradient(90deg, #123456, #456789, #789ABC)");
   expect(html).toContain("var(--gradient)");

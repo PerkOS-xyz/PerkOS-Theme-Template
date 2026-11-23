@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { contrastRatio, deriveColors } from "./contrast.ts";
 import type { Image } from "./images.ts";
 import { parseTheme, readTheme, type Theme } from "./validate.ts";
 
@@ -14,13 +15,7 @@ function imageTag(image: Image, className: string): string {
 }
 
 function foreground(fill: string): string {
-  const luminance = [0.2126, 0.7152, 0.0722].reduce((total, weight, index) => {
-    const start = 1 + index * 2;
-    const channel = Number.parseInt(fill.slice(start, start + 2), 16) / 255;
-    const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-    return total + weight * linear;
-  }, 0);
-  return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? "#000000" : "#FFFFFF";
+  return contrastRatio("#000000", fill) >= contrastRatio("#FFFFFF", fill) ? "#000000" : "#FFFFFF";
 }
 
 const cards = [
@@ -33,12 +28,15 @@ const cards = [
 function render(theme: Theme): string {
   const { colors, networkHeader } = theme;
   const name = escapeHtml(theme.name);
-  const gradient = colors.gradient ?? [colors.primary, colors.primary];
-  const roles = { ...colors, bar: colors.bar ?? colors.surface, gradient: `linear-gradient(90deg, ${gradient.join(", ")})` };
+  const derived = deriveColors(colors);
+  const roles = {
+    ...colors, bar: derived.bar, gradient: derived.gradient, hover: derived.hover,
+    border: derived.border, "strong-border": derived.essentialBorder, "muted-text": derived.mutedText,
+  };
   const fills = ["primary", "secondary", "success", "warning", "danger"] as const;
   const variables = [
     ...Object.entries(roles).map(([role, value]) => `--${role}: ${value};`),
-    ...fills.map(role => `--on-${role}: ${foreground(roles[role])};`),
+    ...fills.map(role => `--on-${role}: ${role === "primary" ? derived.textOnPrimary : foreground(roles[role])};`),
   ].join("\n      ");
   return `<!doctype html>
 <html lang="en">
@@ -51,8 +49,6 @@ function render(theme: Theme): string {
     :root {
       color-scheme: ${theme.scheme};
       ${variables}
-      --border: color-mix(in srgb, var(--surface), var(--text) 25%);
-      --strong-border: color-mix(in srgb, var(--surface), var(--text) 40%);
     }
     * { box-sizing: border-box; }
     body { margin: 0; font: 1rem/1.5 system-ui, sans-serif; background: var(--background); color: var(--text); }
@@ -71,7 +67,9 @@ function render(theme: Theme): string {
     .actions { display: flex; flex-wrap: wrap; gap: .5rem; }
     button, .chip { border-radius: .5rem; padding: .35rem .65rem; }
     button { border: 1px solid transparent; font: inherit; font-weight: 600; }
-    button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+    button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+    .neutral { background: var(--hover); color: var(--text); border-color: var(--strong-border); }
+    .column h3 { color: var(--muted-text); }
     ${fills.map(role => `.${role} { background: var(--${role}); color: var(--on-${role}); }`).join("\n    ")}
     .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
     .column, .chat { background: var(--surface); border: 1px solid var(--border); border-radius: .75rem; padding: .75rem; }
@@ -84,7 +82,7 @@ function render(theme: Theme): string {
     .chat { display: grid; gap: .75rem; }
     .bubble { border-radius: .65rem; padding: .65rem .85rem; max-width: 90%; }
     .person { justify-self: end; }
-    .agent { justify-self: start; background: var(--background); border: 1px solid var(--border); }
+    .agent { justify-self: start; background: var(--surface); border: 1px solid var(--border); }
     .avatar { width: 1.5rem; height: 1.5rem; object-fit: contain; }
     @media (max-width: 48rem) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 27rem) { .board { grid-template-columns: 1fr; } }
@@ -101,7 +99,7 @@ function render(theme: Theme): string {
     <section aria-labelledby="board-title">
       <div class="section-heading">
         <h2 id="board-title">Board</h2>
-        <div class="actions"><button type="button" class="secondary">Filter</button><button type="button" class="primary">New card</button></div>
+        <div class="actions"><button type="button" class="neutral">Filter</button><button type="button" class="primary">New card</button></div>
       </div>
       <div class="board">
         ${cards.map(({ column, title, chip, role, progress }) => `<section class="column">
