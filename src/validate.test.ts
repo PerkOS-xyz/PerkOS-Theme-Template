@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { contrastRatio, deriveAccentText, deriveColors } from "./contrast.ts";
 import { validateTheme } from "./validate.ts";
 
 const theme = {
@@ -12,6 +13,16 @@ const theme = {
   colors: {
     background: "#101010", surface: "#202020", text: "#FFFFFF", primary: "#B0C0FF",
     secondary: "#FFE0FF", success: "#00FF00", warning: "#FFFF00", danger: "#FF8484",
+  },
+};
+
+const lightTheme = {
+  ...theme,
+  name: "Day",
+  scheme: "light",
+  colors: {
+    background: "#FFFFFF", surface: "#F0F0F0", text: "#000000", primary: "#333366",
+    secondary: "#B9B9B9", success: "#197829", warning: "#A85D00", danger: "#AC2828",
   },
 };
 
@@ -42,6 +53,64 @@ function svg(markup: string) {
 function check(value: unknown): string[] {
   return validateTheme(Buffer.from(JSON.stringify(value)));
 }
+
+describe("theme contrast", () => {
+  it.each([theme, lightTheme])("accepts accessible $scheme themes", value => {
+    expect(check(value)).toEqual([]);
+  });
+
+  it.each([theme, lightTheme])("reports all failures for a flat $scheme theme", value => {
+    const color = value.colors.background;
+    const colors = {
+      background: color, surface: color, text: color, primary: color, secondary: color,
+      success: color, warning: color, danger: color,
+    };
+    const contexts = ["background", "surface", "hover", "bar", "neutral button",
+      "incoming chat bubble", "popover", "code panel"];
+    const roles = ["text", "muted text", "primary text", "secondary text",
+      "success text", "warning text", "danger text"];
+    expect(check({ ...value, colors })).toEqual([
+      ...contexts.flatMap(context => roles.map(role =>
+        `${role} (${color}) on ${context} (${color}): 1.000:1 (requires 4.5:1)`)),
+      `essential border (${color}) on background (${color}): 1.000:1 (requires 3:1)`,
+      ...["background", "surface", "hover", "bar"].map(context =>
+        `focus (${color}) on ${context} (${color}): 1.000:1 (requires 3:1)`),
+    ]);
+  });
+
+  it("derives rounded colors and respects bar and gradient overrides", () => {
+    expect(deriveColors(theme.colors)).toEqual({
+      hover: "#323232", border: "#585858", essentialBorder: "#797979",
+      mutedText: "#C7C7C7", textOnPrimary: "#000000", bar: "#202020",
+      gradient: "linear-gradient(90deg, #B0C0FF, #B0C0FF)",
+    });
+    expect(deriveColors({
+      ...lightTheme.colors, bar: "#EEEEEE", gradient: ["#FFFFFF", "#CCCCCC", "#000000"],
+    })).toMatchObject({
+      bar: "#EEEEEE", textOnPrimary: "#FFFFFF",
+      gradient: "linear-gradient(90deg, #FFFFFF, #CCCCCC, #000000)",
+    });
+  });
+
+  it.each([
+    [theme, "#707070", "#767676", "#777777", "#FEFEFE", "#FDFDFD"],
+    [lightTheme, "#7F7F7F", "#757575", "#747474", "#010101", "#030303"],
+  ] as const)("walks hover, muted text and accent text to a passing step for $scheme", (
+    value, surface, hover, nextHover, mutedText, nextMuted,
+  ) => {
+    const { text } = value.colors;
+    const derived = deriveColors({ ...value.colors, surface });
+    expect(derived.hover).toBe(hover);
+    expect(contrastRatio(text, derived.hover)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(text, nextHover)).toBeLessThan(4.5);
+    expect(derived.mutedText).toBe(mutedText);
+    expect(contrastRatio(nextMuted, derived.hover)).toBeLessThan(4.5);
+
+    const background = text === "#FFFFFF" ? "#000000" : "#FFFFFF";
+    expect(deriveAccentText(background, text, background)).toBe("#757575");
+    expect(deriveAccentText(text, text, background)).toBe(text);
+  });
+});
 
 describe("theme validation", () => {
   it("accepts required fields and the optional v2 fields", () => {
@@ -171,17 +240,30 @@ it("checks every matching file, including nested hidden folders, and reports fai
   try {
     mkdirSync(join(directory, ".themes"));
     writeFileSync(join(directory, ".themes", "valid.perkos-theme.json"), JSON.stringify(theme));
+    writeFileSync(join(directory, "contrast.perkos-theme.json"), JSON.stringify({
+      ...theme, colors: { ...theme.colors, bar: "#FFFFFF" },
+    }));
+    const script = fileURLToPath(new URL("./validate.ts", import.meta.url));
+    const contrastOnly = spawnSync(process.execPath, [script], { cwd: directory, encoding: "utf8" });
+    expect(contrastOnly.status).toBe(1);
     writeFileSync(join(directory, "invalid.perkos-theme.json"), JSON.stringify({ ...theme, version: 1 }));
     writeFileSync(join(directory, "unsafe.perkos-theme.json"), JSON.stringify({
       ...theme, logo: svg('<svg viewBox="0 0 32 32"><path href="#shape"/></svg>'),
     }));
     writeFileSync(join(directory, "ignored.json"), "{");
-    const script = fileURLToPath(new URL("./validate.ts", import.meta.url));
     const result = spawnSync(process.execPath, [script], { cwd: directory, encoding: "utf8" });
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(join(".themes", "valid.perkos-theme.json") + ": valid");
     expect(result.stderr.trim().split("\n")).toEqual([
+      "contrast.perkos-theme.json: text (#FFFFFF) on bar (#FFFFFF): 1.000:1 (requires 4.5:1)",
+      "contrast.perkos-theme.json: muted text (#FFFFFF) on bar (#FFFFFF): 1.000:1 (requires 4.5:1)",
+      "contrast.perkos-theme.json: primary text (#FFFFFF) on bar (#FFFFFF): 1.000:1 (requires 4.5:1)",
+      "contrast.perkos-theme.json: secondary text (#FFFFFF) on bar (#FFFFFF): 1.000:1 (requires 4.5:1)",
+      "contrast.perkos-theme.json: success text (#FFFFFF) on bar (#FFFFFF): 1.000:1 (requires 4.5:1)",
+      "contrast.perkos-theme.json: warning text (#FFFFFF) on bar (#FFFFFF): 1.000:1 (requires 4.5:1)",
+      "contrast.perkos-theme.json: danger text (#FFFFFF) on bar (#FFFFFF): 1.000:1 (requires 4.5:1)",
+      "contrast.perkos-theme.json: focus (#B0C0FF) on bar (#FFFFFF): 1.775:1 (requires 3:1)",
       "invalid.perkos-theme.json: /version must be 2",
       "unsafe.perkos-theme.json: /logo: SVG attribute href has an unsupported name or value",
     ]);

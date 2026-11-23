@@ -1,6 +1,7 @@
 import { closeSync, openSync, readdirSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { Ajv, type ErrorObject } from "ajv";
+import { checkContrast, type ThemeColors } from "./contrast.ts";
 import { checkImage, type Image } from "./images.ts";
 import schema from "../schema/theme-v2.schema.json" with { type: "json" };
 
@@ -10,10 +11,7 @@ export type Theme = {
   version: 2;
   name: string;
   scheme: "dark" | "light";
-  colors: Record<"background" | "surface" | "text" | "primary" | "secondary" | "success" | "warning" | "danger", string> & {
-    bar?: string;
-    gradient?: string[];
-  };
+  colors: ThemeColors;
   logo?: Image;
   sparky?: Image;
   networkHeader?: { name: string; logo: Image; notices: string[]; source: string; terms: string; reviewedAt: string };
@@ -54,7 +52,7 @@ export function parseTheme(bytes: Uint8Array): { theme: Theme } | { issues: stri
     return { issues: ["invalid UTF-8 JSON: " + message(error)] };
   }
   if (!checkSchema(theme)) return { issues: (checkSchema.errors ?? []).map(schemaMessage) };
-  const issues: string[] = [];
+  const issues = checkContrast(theme.colors);
   const images = { "/logo": theme.logo, "/sparky": theme.sparky, "/networkHeader/logo": theme.networkHeader?.logo };
   for (const [path, image] of Object.entries(images)) {
     if (!image) continue;
