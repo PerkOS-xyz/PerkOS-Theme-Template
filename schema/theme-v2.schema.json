@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PerkOS theme version 2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "scheme", "colors"],
+  "properties": {
+    "version": { "const": 2 },
+    "name": { "$ref": "#/definitions/name" },
+    "scheme": { "enum": ["dark", "light"] },
+    "colors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["background", "surface", "text", "primary", "secondary", "success", "warning", "danger"],
+      "properties": {
+        "background": { "$ref": "#/definitions/color" },
+        "surface": { "$ref": "#/definitions/color" },
+        "text": { "$ref": "#/definitions/color" },
+        "primary": { "$ref": "#/definitions/color" },
+        "secondary": { "$ref": "#/definitions/color" },
+        "success": { "$ref": "#/definitions/color" },
+        "warning": { "$ref": "#/definitions/color" },
+        "danger": { "$ref": "#/definitions/color" },
+        "bar": { "$ref": "#/definitions/color" },
+        "gradient": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": { "$ref": "#/definitions/color" }
+        }
+      }
+    },
+    "logo": { "$ref": "#/definitions/image" },
+    "sparky": { "$ref": "#/definitions/image" },
+    "networkHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "logo", "notices", "source", "terms", "reviewedAt"],
+      "properties": {
+        "name": { "$ref": "#/definitions/nonBlank" },
+        "logo": { "$ref": "#/definitions/image" },
+        "notices": { "type": "array", "items": { "$ref": "#/definitions/nonBlank" } },
+        "source": { "$ref": "#/definitions/nonBlank" },
+        "terms": { "$ref": "#/definitions/nonBlank" },
+        "reviewedAt": { "$ref": "#/definitions/nonBlank" }
+      }
+    }
+  },
+  "definitions": {
+    "name": { "type": "string", "maxLength": 80, "pattern": "^\\S(?:[\\s\\S]*\\S)?(?![\\s\\S])" },
+    "nonBlank": { "type": "string", "pattern": "\\S" },
+    "color": { "type": "string", "minLength": 7, "maxLength": 7, "pattern": "^#[0-9A-F]{6}$" },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mime", "base64"],
+      "properties": {
+        "mime": { "enum": ["image/png", "image/jpeg", "image/webp", "image/svg+xml"] },
+        "base64": { "type": "string", "minLength": 4, "maxLength": 174764, "pattern": "^[A-Za-z0-9+/]+={0,2}(?![\\s\\S])" }
+      }
+    }
+  }
+}
