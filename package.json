@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "node src/validate.ts"
+    "check": "node src/validate.ts",
+    "preview": "node src/preview.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
